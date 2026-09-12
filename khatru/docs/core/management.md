@@ -8,9 +8,9 @@ outline: deep
 
 All [`khatru.Relay`](https://pkg.go.dev/fiatjaf.com/nostr/khatru#Relay) instances expose a field `ManagementAPI` with a [`RelayManagementAPI`](https://pkg.go.dev/fiatjaf.com/nostr/khatru#RelayManagementAPI) instance inside, which can be used for creating handlers for each of the RPC methods.
 
-There is also a generic `RejectAPICall` which is a slice of functions that will be called before any RPC method, if they exist and, if any of them returns true, the request will be rejected.
+There is also a generic `OnAPICall` which is called before any RPC method and, if it returns true, the request is rejected.
 
-The most basic implementation of a `RejectAPICall` handler would be one that checks the public key of the caller with a hardcoded public key of the relay owner:
+The most basic implementation of an `OnAPICall` handler would be one that checks the public key of the caller against a hardcoded public key of the relay owner:
 
 ```go
 var owner = nostr.MustPubKeyFromHex("<my-own-pubkey>")
@@ -19,9 +19,9 @@ var allowedPubkeys = make([]nostr.PubKey, 0, 10)
 func main () {
 	relay := khatru.NewRelay()
 
-	relay.ManagementAPI.RejectAPICall = func(ctx context.Context, mp nip86.MethodParams) (reject bool, msg string) {
+	relay.ManagementAPI.OnAPICall = func(ctx context.Context, mp nip86.MethodParams) (reject bool, msg string) {
 		authed, _ := khatru.GetAuthed(ctx)
-		if user != owner {
+		if authed != owner {
 			return true, "go away, intruder"
 		}
 		return false, ""
@@ -42,7 +42,7 @@ func main () {
 }
 ```
 
-You can also not provide any `RejectAPICall` handler and do the approval specifically on each RPC handler.
+You can also not provide any `OnAPICall` handler and do the approval specifically on each RPC handler.
 
 In the following example any current member can include any other pubkey, and anyone who was added before is able to remove any pubkey that was added afterwards (not a very good idea, but serves as an example).
 
@@ -53,7 +53,7 @@ func main () {
 	relay := khatru.NewRelay()
 
 	relay.ManagementAPI.AllowPubKey = func(ctx context.Context, pubkey nostr.PubKey, reason string) error {
-		caller := khatru.GetAuthed(ctx)
+		caller, _ := khatru.GetAuthed(ctx)
 
 		if slices.Contains(allowedPubkeys, caller) {
 			allowedPubkeys = append(allowedPubkeys, pubkey)
@@ -63,7 +63,7 @@ func main () {
 		return fmt.Errorf("you're not authorized")
 	}
 	relay.ManagementAPI.BanPubKey = func(ctx context.Context, pubkey nostr.PubKey, reason string) error {
-		caller := khatru.GetAuthed(ctx)
+		caller, _ := khatru.GetAuthed(ctx)
 
 		callerIdx := slices.Index(allowedPubkeys, caller)
 		if callerIdx == -1 {
@@ -81,3 +81,14 @@ func main () {
 		return nil
 	}
 }
+```
+
+By default, `supportedmethods` reports methods that are implemented. This can be customized using `OverwriteSupportedMethods` to for example report only what the authenticated pubkey can do:
+
+```go
+relay.OverwriteSupportedMethods = func(ctx context.Context, methods []string) []string {
+	pubkey, _ := khatru.GetAuthed(ctx)
+
+	return getSupportedMethodsForPubkey(pubkey)
+}
+```

@@ -163,6 +163,12 @@ func (rl *Relay) HandleNIP86(w http.ResponseWriter, r *http.Request) {
 				methods = append(methods, methodName)
 			}
 		}
+
+		// Allow customizing supported methods by authenticated pubkey
+		if rl.OverwriteSupportedMethods != nil {
+			methods = rl.OverwriteSupportedMethods(ctx, methods)
+		}
+
 		resp.Result = methods
 	} else {
 		switch thing := mp.(type) {
