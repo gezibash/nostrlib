@@ -75,7 +75,18 @@ func TestResponse(t *testing.T) {
 
 	respj, err := json.Marshal(resp)
 	require.NoError(t, err)
-	require.Equal(t, `{"names":{"foo":"`+pk1.Hex()+`","bar":"`+pk2.Hex()+`"},"relays":{"`+pk1.Hex()+`":["wss://a.com"],"`+pk2.Hex()+`":["wss://a.com","wss://b.com"]}}`, string(respj))
+
+	var raw struct {
+		Names  map[string]string   `json:"names"`
+		Relays map[string][]string `json:"relays"`
+	}
+	require.NoError(t, json.Unmarshal(respj, &raw))
+	require.Len(t, raw.Names, 2)
+	require.Equal(t, pk1.Hex(), raw.Names["foo"])
+	require.Equal(t, pk2.Hex(), raw.Names["bar"])
+	require.Len(t, raw.Relays, 2)
+	require.Equal(t, []string{"wss://a.com"}, raw.Relays[pk1.Hex()])
+	require.Equal(t, []string{"wss://a.com", "wss://b.com"}, raw.Relays[pk2.Hex()])
 
 	back := WellKnownResponse{}
 	err = json.Unmarshal(respj, &back)
