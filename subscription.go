@@ -125,6 +125,9 @@ func (sub *Subscription) dispatchEose(hint []string) {
 // handleClosed handles the CLOSED message from a relay.
 func (sub *Subscription) handleClosed(reason string) {
 	go func() {
+		// A relay can close a completed ID query immediately after EOSE.
+		// Deliver pending history before notifying consumers or canceling it.
+		sub.storedwg.Wait()
 		sub.ClosedReason <- reason
 		sub.live.Store(false) // set this so we don't send an unnecessary CLOSE to the relay
 		sub.cancel(fmt.Errorf("CLOSED received: %s", reason))
