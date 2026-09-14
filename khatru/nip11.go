@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 func (rl *Relay) HandleNIP11(w http.ResponseWriter, r *http.Request) {
@@ -35,16 +34,22 @@ func (rl *Relay) HandleNIP11(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
-// resolveRelativeURL joins a scheme-less (relative) reference onto baseURL. A
-// value that already carries a scheme — http(s), but also data: and any other
-// absolute URI — is returned unchanged, so an inline data: icon isn't corrupted
-// into "<baseURL>/data:...".
+// resolveRelativeURL joins a scheme-less (relative) reference onto baseURL using
+// net/url. Absolute URIs (http(s), data:, etc.) returned unchanged.
 func resolveRelativeURL(ref, baseURL string) string {
 	if ref == "" {
 		return ref
 	}
-	if u, err := url.Parse(ref); err == nil && u.Scheme != "" {
+	u, err := url.Parse(ref)
+	if err != nil {
 		return ref
 	}
-	return strings.TrimSuffix(baseURL, "/") + "/" + strings.TrimPrefix(ref, "/")
+	if u.IsAbs() {
+		return ref
+	}
+	b, err := url.Parse(baseURL)
+	if err != nil {
+		return ref
+	}
+	return b.ResolveReference(u).String()
 }
