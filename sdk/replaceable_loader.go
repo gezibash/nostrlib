@@ -37,12 +37,16 @@ const (
 	kind_10012 replaceableIndex = 18
 	kind_10054 replaceableIndex = 19
 	kind_10064 replaceableIndex = 20
+	kind_10009 replaceableIndex = 21
+	kind_10021 replaceableIndex = 22
+	kind_10027 replaceableIndex = 23
+	kind_10063 replaceableIndex = 24
 )
 
 type EventResult dataloader.Result[*nostr.Event]
 
 func (sys *System) initializeReplaceableDataloaders() {
-	sys.replaceableLoaders = make([]*dataloader.Loader[nostr.PubKey, nostr.Event], 21)
+	sys.replaceableLoaders = make([]*dataloader.Loader[nostr.PubKey, nostr.Event], 25)
 	sys.replaceableLoaders[kind_0] = sys.createReplaceableDataloader(0)
 	sys.replaceableLoaders[kind_3] = sys.createReplaceableDataloader(3)
 	sys.replaceableLoaders[kind_10000] = sys.createReplaceableDataloader(10000)
@@ -64,6 +68,10 @@ func (sys *System) initializeReplaceableDataloaders() {
 	sys.replaceableLoaders[kind_10012] = sys.createReplaceableDataloader(10012)
 	sys.replaceableLoaders[kind_10054] = sys.createReplaceableDataloader(10054)
 	sys.replaceableLoaders[kind_10064] = sys.createReplaceableDataloader(10064)
+	sys.replaceableLoaders[kind_10009] = sys.createReplaceableDataloader(10009)
+	sys.replaceableLoaders[kind_10021] = sys.createReplaceableDataloader(10021)
+	sys.replaceableLoaders[kind_10027] = sys.createReplaceableDataloader(10027)
+	sys.replaceableLoaders[kind_10063] = sys.createReplaceableDataloader(10063)
 }
 
 func (sys *System) createReplaceableDataloader(kind nostr.Kind) *dataloader.Loader[nostr.PubKey, nostr.Event] {

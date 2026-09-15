@@ -209,6 +209,17 @@ func (sys *System) FetchGitAuthorList(ctx context.Context, pubkey nostr.PubKey) 
 	return ml
 }
 
+func (sys *System) FetchSimpleGroupsList(ctx context.Context, pubkey nostr.PubKey) GenericList[string, GroupRef] {
+	sys.simpleGroupsListCacheOnce.Do(func() {
+		if sys.SimpleGroupsListCache == nil {
+			sys.SimpleGroupsListCache = cache_memory.New[GenericList[string, GroupRef]](1000)
+		}
+	})
+
+	gl, _ := fetchGenericList(sys, ctx, pubkey, 10009, kind_10009, parseGroupRef, sys.SimpleGroupsListCache)
+	return gl
+}
+
 func parseProfileRef(tag nostr.Tag) (fw ProfileRef, ok bool) {
 	if len(tag) < 2 {
 		return fw, false
@@ -284,6 +295,57 @@ func (sys *System) FetchGitRepositoryList(ctx context.Context, pubkey nostr.PubK
 
 	ml, _ := fetchGenericList(sys, ctx, pubkey, 10018, kind_10018, parseEventRef, sys.GitRepositoryListCache)
 	return ml
+}
+
+func (sys *System) FetchFavoriteFollowSetsList(ctx context.Context, pubkey nostr.PubKey) GenericList[string, EventRef] {
+	sys.favoriteFollowSetsListOnce.Do(func() {
+		if sys.FavoriteFollowSetsListCache == nil {
+			sys.FavoriteFollowSetsListCache = cache_memory.New[GenericList[string, EventRef]](1000)
+		}
+	})
+
+	gl, _ := fetchGenericList(sys, ctx, pubkey, 10021, kind_10021, parseFollowSetRef, sys.FavoriteFollowSetsListCache)
+	return gl
+}
+
+func parseFollowSetRef(tag nostr.Tag) (evr EventRef, ok bool) {
+	if len(tag) < 2 || tag[0] != "a" {
+		return evr, false
+	}
+
+	pointer, err := nostr.EntityPointerFromTag(tag)
+	if err != nil || pointer.Kind != 30000 {
+		return evr, false
+	}
+
+	evr.Pointer = pointer
+	return evr, true
+}
+
+func (sys *System) FetchFavoriteScrollsList(ctx context.Context, pubkey nostr.PubKey) GenericList[string, EventRef] {
+	sys.favoriteScrollsListCacheOnce.Do(func() {
+		if sys.FavoriteScrollsListCache == nil {
+			sys.FavoriteScrollsListCache = cache_memory.New[GenericList[string, EventRef]](1000)
+		}
+	})
+
+	gl, _ := fetchGenericList(sys, ctx, pubkey, 10027, kind_10027, parseFavoriteScrollRef, sys.FavoriteScrollsListCache)
+	return gl
+}
+
+func parseFavoriteScrollRef(tag nostr.Tag) (evr EventRef, ok bool) {
+	if len(tag) < 2 || tag[0] != "e" {
+		return evr, false
+	}
+
+	pointer, err := nostr.EventPointerFromTag(tag)
+	if err != nil {
+		return evr, false
+	}
+	pointer.Kind = 1227
+
+	evr.Pointer = pointer
+	return evr, true
 }
 
 func parseEventRef(tag nostr.Tag) (evr EventRef, ok bool) {
@@ -471,19 +533,21 @@ func (sys *System) FetchBlossomServerList(ctx context.Context, pubkey nostr.PubK
 		}
 	})
 
-	ml, _ := fetchGenericList(sys, ctx, pubkey, 10101, kind_10101, func(t nostr.Tag) (BlossomURL, bool) {
-		if len(t) < 2 {
-			return "", false
-		}
-
-		nm, err := nostr.NormalizeHTTPURL(t[1])
-		if err != nil {
-			return "", false
-		}
-
-		return BlossomURL(nm), true
-	}, sys.BlossomServerListCache)
+	ml, _ := fetchGenericList(sys, ctx, pubkey, 10063, kind_10063, parseBlossomServerRef, sys.BlossomServerListCache)
 	return ml
+}
+
+func parseBlossomServerRef(tag nostr.Tag) (bu BlossomURL, ok bool) {
+	if len(tag) < 2 || tag[0] != "server" {
+		return bu, false
+	}
+
+	nm, err := nostr.NormalizeHTTPURL(tag[1])
+	if err != nil {
+		return bu, false
+	}
+
+	return BlossomURL(nm), true
 }
 
 // -- emoji-based list items
@@ -514,6 +578,30 @@ func parseEmojiTag(tag nostr.Tag) (Emoji, bool) {
 		return Emoji{}, false
 	}
 	return Emoji{Shortcode: tag[1], ImageURL: tag[2]}, true
+}
+
+// -- simple-group-based list items
+
+type GroupRef struct {
+	GroupId string
+	Relay   string
+	Name    string
+}
+
+func (gr GroupRef) Value() string { return gr.Relay + "/" + gr.GroupId }
+
+func parseGroupRef(tag nostr.Tag) (gr GroupRef, ok bool) {
+	if len(tag) < 3 || tag[0] != "group" {
+		return gr, false
+	}
+
+	gr.GroupId = tag[1]
+	gr.Relay = nostr.NormalizeURL(tag[2])
+	if len(tag) > 3 {
+		gr.Name = tag[3]
+	}
+
+	return gr, true
 }
 
 // -- podcast-based list items

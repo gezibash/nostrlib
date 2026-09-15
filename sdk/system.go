@@ -65,6 +65,12 @@ type System struct {
 	BlossomServerListCache        cache.Cache32[GenericList[string, BlossomURL]]
 	gitAuthorListCacheOnce        sync.Once
 	GitAuthorListCache            cache.Cache32[GenericList[nostr.PubKey, ProfileRef]]
+	simpleGroupsListCacheOnce     sync.Once
+	SimpleGroupsListCache         cache.Cache32[GenericList[string, GroupRef]]
+	favoriteFollowSetsListOnce    sync.Once
+	FavoriteFollowSetsListCache   cache.Cache32[GenericList[string, EventRef]]
+	favoriteScrollsListCacheOnce  sync.Once
+	FavoriteScrollsListCache      cache.Cache32[GenericList[string, EventRef]]
 	emojiListCacheOnce            sync.Once
 	EmojiListCache                cache.Cache32[GenericList[string, Emoji]]
 	relayFeedsListCacheOnce       sync.Once
