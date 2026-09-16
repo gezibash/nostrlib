@@ -53,7 +53,6 @@ type RelayManagementAPI struct {
 	ListClaims                  func(ctx context.Context) ([]string, error)
 	CreateClaim                 func(ctx context.Context, claim string) error
 	DeleteClaim                 func(ctx context.Context, claim string) error
-	SignEvent                   func(ctx context.Context, kind nostr.Kind, createdAt nostr.Timestamp, tags nostr.Tags, content string) (nostr.Event, error)
 	Generic                     func(ctx context.Context, request nip86.Request) (nip86.Response, error)
 }
 
@@ -427,14 +426,6 @@ func (rl *Relay) HandleNIP86(w http.ResponseWriter, r *http.Request) {
 				resp.Error = err.Error()
 			} else {
 				resp.Result = true
-			}
-		case nip86.SignEvent:
-			if rl.ManagementAPI.SignEvent == nil {
-				resp.Error = fmt.Sprintf("method %s not supported", thing.MethodName())
-			} else if result, err := rl.ManagementAPI.SignEvent(ctx, thing.Kind, thing.CreatedAt, thing.Tags, thing.Content); err != nil {
-				resp.Error = err.Error()
-			} else {
-				resp.Result = result
 			}
 		case nip86.ListDisallowedKinds:
 			if rl.ManagementAPI.ListDisallowedKinds == nil {

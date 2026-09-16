@@ -354,32 +354,6 @@ func DecodeRequest(req Request) (MethodParams, error) {
 			return nil, fmt.Errorf("missing claim param for '%s'", req.Method)
 		}
 		return DeleteClaim{claim}, nil
-	case "signevent":
-		if len(req.Params) == 0 {
-			return nil, fmt.Errorf("invalid number of params for '%s'", req.Method)
-		}
-		tmpl, ok := req.Params[0].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing event param for '%s'", req.Method)
-		}
-		kind, ok := tmpl["kind"].(float64)
-		if !ok || math.Trunc(kind) != kind {
-			return nil, fmt.Errorf("invalid kind '%v' for '%s'", tmpl["kind"], req.Method)
-		}
-		var createdAt nostr.Timestamp
-		if ca, ok := tmpl["created_at"]; ok {
-			caf, ok := ca.(float64)
-			if !ok || math.Trunc(caf) != caf {
-				return nil, fmt.Errorf("invalid created_at '%v' for '%s'", ca, req.Method)
-			}
-			createdAt = nostr.Timestamp(caf)
-		}
-		tags, err := coerceTags(tmpl["tags"])
-		if err != nil {
-			return nil, fmt.Errorf("invalid tags for '%s': %w", req.Method, err)
-		}
-		content, _ := tmpl["content"].(string)
-		return SignEvent{nostr.Kind(kind), createdAt, tags, content}, nil
 	case "stats":
 		return Stats{}, nil
 	default:
@@ -455,7 +429,6 @@ var (
 	_ MethodParams = (*ListClaims)(nil)
 	_ MethodParams = (*CreateClaim)(nil)
 	_ MethodParams = (*DeleteClaim)(nil)
-	_ MethodParams = (*SignEvent)(nil)
 	_ MethodParams = (*Stats)(nil)
 )
 
@@ -670,15 +643,6 @@ type DeleteClaim struct {
 }
 
 func (DeleteClaim) MethodName() string { return "deleteclaim" }
-
-type SignEvent struct {
-	Kind      nostr.Kind
-	CreatedAt nostr.Timestamp
-	Tags      nostr.Tags
-	Content   string
-}
-
-func (SignEvent) MethodName() string { return "signevent" }
 
 type Stats struct{}
 
