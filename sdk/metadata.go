@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"fiatjaf.com/nostr"
+	"fiatjaf.com/nostr/nip02"
 	"fiatjaf.com/nostr/nip05"
 	"fiatjaf.com/nostr/nip19"
 	"fiatjaf.com/nostr/sdk/hints"
@@ -82,10 +84,27 @@ func (p *ProfileMetadata) NIP05Valid(ctx context.Context) bool {
 	return p.nip05Valid
 }
 
-// FetchProfileFromInput takes an nprofile, npub, nip05 or hex pubkey and returns a ProfileMetadata,
+// FetchProfileFromInput takes an nprofile, npub, nip05, hex pubkey or a NIP-02 petname path
+// like "~erin/david/frank" and returns a ProfileMetadata,
 // updating the hintsDB in the process with any eventual relay hints.
+// Petname paths are resolved relative to `from` (the caller's own pubkey), except when the
+// first segment itself is a nip05/npub/etc reference resolvable via InputToProfile.
 // Returns an error if the profile reference couldn't be decoded.
-func (sys System) FetchProfileFromInput(ctx context.Context, nip19OrNip05Code string) (ProfileMetadata, error) {
+func (sys System) FetchProfileFromInput(ctx context.Context, nip19OrNip05Code string, from ...nostr.PubKey) (ProfileMetadata, error) {
+	if strings.HasPrefix(nip19OrNip05Code, "~") {
+		var fromPk nostr.PubKey
+		if len(from) > 0 {
+			fromPk = from[0]
+		}
+		pk, err := sys.ResolvePetnamePath(ctx, fromPk, nip19OrNip05Code)
+		if err != nil {
+			return ProfileMetadata{}, err
+		}
+
+		pm := sys.FetchProfileMetadata(ctx, pk)
+		return pm, nil
+	}
+
 	p := InputToProfile(ctx, nip19OrNip05Code)
 	if p == nil {
 		return ProfileMetadata{}, fmt.Errorf("couldn't decode profile reference")
@@ -99,6 +118,65 @@ func (sys System) FetchProfileFromInput(ctx context.Context, nip19OrNip05Code st
 
 	pm := sys.FetchProfileMetadata(ctx, p.PublicKey)
 	return pm, nil
+}
+
+// ResolvePetnamePath resolves NIP-02 petname references like "~erin/david/frank" to a pubkey
+// by walking the follow lists of each name in the chain. The first name is either directly
+// decodable via InputToProfile (npub, nprofile, hex, nip05 -- e.g. "~erin@names.com/david")
+// or a petname relative to `from`'s follow list.
+// See https://github.com/nostr-protocol/nips/blob/master/02.md.
+func (sys *System) ResolvePetnamePath(ctx context.Context, from nostr.PubKey, value string) (nostr.PubKey, error) {
+	parts, err := nip02.ParsePetnamePath(value)
+	if err != nil {
+		return nostr.ZeroPK, err
+	}
+
+	// resolve the root: a directly decodable reference wins, otherwise a petname of `from`.
+	var pk nostr.PubKey
+	if pp := InputToProfile(ctx, parts[0]); pp != nil {
+		pk = pp.PublicKey
+	} else {
+		if !nip02.IsValidPetname(parts[0]) {
+			return nostr.ZeroPK, fmt.Errorf("invalid petname \"%s\"", parts[0])
+		}
+		if from == nostr.ZeroPK {
+			return nostr.ZeroPK, fmt.Errorf("can't resolve relative petname \"%s\" without an identity", parts[0])
+		}
+
+		fl := sys.FetchFollowList(ctx, from)
+		if fl.Event == nil {
+			return nostr.ZeroPK, fmt.Errorf("failed to resolve \"%s\": couldn't get your own follow list (needed to resolve \"%s\")", value, parts[0])
+		}
+		next, ok := findPetnameInFollowList(fl, parts[0])
+		if !ok {
+			return nostr.ZeroPK, fmt.Errorf("failed to resolve \"%s\": no one in your follow list is named \"%s\"", value, parts[0])
+		}
+		pk = next
+	}
+
+	// walk the rest of the chain.
+	for _, petname := range parts[1:] {
+		fl := sys.FetchFollowList(ctx, pk)
+		if fl.Event == nil {
+			return nostr.ZeroPK, fmt.Errorf("failed to resolve \"%s\": couldn't get follow list of %s", value, pk.Hex())
+		}
+		next, ok := findPetnameInFollowList(fl, petname)
+		if !ok {
+			return nostr.ZeroPK, fmt.Errorf("failed to resolve \"%s\": %s doesn't follow anyone named \"%s\"", value, pk.Hex(), petname)
+		}
+		pk = next
+	}
+
+	return pk, nil
+}
+
+func findPetnameInFollowList(fl GenericList[nostr.PubKey, ProfileRef], petname string) (nostr.PubKey, bool) {
+	for _, item := range fl.Items {
+		if item.Petname == petname {
+			return item.Pubkey, true
+		}
+	}
+	return nostr.ZeroPK, false
 }
 
 // FetchProfileMetadata fetches metadata for a given user from the local cache, or from the local store,
