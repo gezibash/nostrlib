@@ -122,8 +122,8 @@ func (sys System) FetchProfileFromInput(ctx context.Context, nip19OrNip05Code st
 
 // ResolvePetnamePath resolves NIP-02 petname references like "~erin/david/frank" to a pubkey
 // by walking the follow lists of each name in the chain. The first name is either directly
-// decodable via InputToProfile (npub, nprofile, hex, nip05 -- e.g. "~erin@names.com/david")
-// or a petname relative to `from`'s follow list.
+// decodable via InputToProfile (npub, nprofile, hex, nip05 -- e.g. "~erin@names.com/david"),
+// a petname relative to `from`'s follow list, or empty to use `from` itself ("~/david").
 // See https://github.com/nostr-protocol/nips/blob/master/02.md.
 func (sys *System) ResolvePetnamePath(ctx context.Context, from nostr.PubKey, value string) (nostr.PubKey, error) {
 	parts, err := nip02.ParsePetnamePath(value)
@@ -133,7 +133,12 @@ func (sys *System) ResolvePetnamePath(ctx context.Context, from nostr.PubKey, va
 
 	// resolve the root: a directly decodable reference wins, otherwise a petname of `from`.
 	var pk nostr.PubKey
-	if pp := InputToProfile(ctx, parts[0]); pp != nil {
+	if parts[0] == "" {
+		if from == nostr.ZeroPK {
+			return nostr.ZeroPK, fmt.Errorf("can't resolve current user without an identity")
+		}
+		pk = from
+	} else if pp := InputToProfile(ctx, parts[0]); pp != nil {
 		pk = pp.PublicKey
 	} else {
 		if !nip02.IsValidPetname(parts[0]) {

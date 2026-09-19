@@ -15,6 +15,10 @@ func TestParsePetnamePath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"erin"}, parts)
 
+	parts, err = ParsePetnamePath("~/david")
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "david"}, parts)
+
 	_, err = ParsePetnamePath("~")
 	require.Error(t, err)
 
@@ -22,6 +26,9 @@ func TestParsePetnamePath(t *testing.T) {
 	require.Error(t, err)
 
 	_, err = ParsePetnamePath("~erin/")
+	require.Error(t, err)
+
+	_, err = ParsePetnamePath("~/")
 	require.Error(t, err)
 
 	_, err = ParsePetnamePath("erin")

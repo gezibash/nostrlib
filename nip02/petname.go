@@ -7,7 +7,8 @@ import (
 )
 
 // ParsePetnamePath parses references like "~erin/david/frank" into ["erin" "david" "frank"].
-// The leading "~" is required. Empty names (e.g. "~erin//frank", "~") are rejected.
+// An empty first name ("~/name") refers to the current user. Other empty names
+// (e.g. "~erin//frank", "~/") are rejected.
 func ParsePetnamePath(value string) ([]string, error) {
 	if !strings.HasPrefix(value, "~") {
 		return nil, fmt.Errorf("invalid petname reference \"%s\": must start with \"~\"", value)
@@ -19,8 +20,8 @@ func ParsePetnamePath(value string) ([]string, error) {
 	}
 
 	parts := strings.Split(inner, "/")
-	for _, part := range parts {
-		if part == "" {
+	for i, part := range parts {
+		if part == "" && i != 0 {
 			return nil, fmt.Errorf("invalid petname reference \"%s\": empty name", value)
 		}
 	}
