@@ -19,7 +19,11 @@ type StaticKeySigner struct {
 	secretKey nostr.SecretKey
 	sessions  map[nostr.PubKey]*Session
 
-	sync.Mutex
+	// mu guards sessions and sessionLocks, nothing else
+	mu sync.Mutex
+
+	// { [clientKey]: lock } -- one lock per session, see lockSession
+	sessionLocks map[nostr.PubKey]*sync.Mutex
 
 	AuthorizeRequest func(harmless bool, from nostr.PubKey, secret string) bool
 
@@ -29,16 +33,48 @@ type StaticKeySigner struct {
 
 func NewStaticKeySigner(secretKey [32]byte) StaticKeySigner {
 	return StaticKeySigner{
-		secretKey: secretKey,
-		sessions:  make(map[nostr.PubKey]*Session),
+		secretKey:    secretKey,
+		sessions:     make(map[nostr.PubKey]*Session),
+		sessionLocks: make(map[nostr.PubKey]*sync.Mutex),
 	}
 }
 
-func (p *StaticKeySigner) getOrCreateSession(clientPubkey nostr.PubKey) (*Session, error) {
-	p.Lock()
-	defer p.Unlock()
+// lockSession returns the lock that serializes requests coming from a single
+// client.
+//
+// Requests from different clients must not share a lock: everything done while
+// it is held (user callbacks, threshold signing) can be arbitrarily slow, and a
+// lock shared by the whole server would let one slow client stall all the rest.
+//
+// It is still needed per client, because Session keeps a replay window that
+// ParseRequest mutates, so requests from the same client must not overlap.
+func (p *StaticKeySigner) lockSession(clientPubkey nostr.PubKey) *sync.Mutex {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
+	if p.sessionLocks == nil {
+		p.sessionLocks = make(map[nostr.PubKey]*sync.Mutex)
+	}
+
+	lock, exists := p.sessionLocks[clientPubkey]
+	if !exists {
+		lock = new(sync.Mutex)
+		p.sessionLocks[clientPubkey] = lock
+	}
+	return lock
+}
+
+// getOrCreateSession returns the session for the given client, creating it if
+// there isn't one yet. The caller must hold the lock from lockSession for that
+// same client, so the session is created at most once per client.
+func (p *StaticKeySigner) getOrCreateSession(clientPubkey nostr.PubKey) (*Session, error) {
+	p.mu.Lock()
+	if p.sessions == nil {
+		p.sessions = make(map[nostr.PubKey]*Session)
+	}
 	session, exists := p.sessions[clientPubkey]
+	p.mu.Unlock()
+
 	if exists {
 		return session, nil
 	}
@@ -54,6 +90,8 @@ func (p *StaticKeySigner) getOrCreateSession(clientPubkey nostr.PubKey) (*Sessio
 	}
 
 	// add to pool
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.sessions[clientPubkey] = session
 
 	return session, nil
@@ -106,6 +144,10 @@ func (p *StaticKeySigner) HandleRequest(_ context.Context, event nostr.Event) (
 		return req, resp, eventResponse,
 			fmt.Errorf("event kind is %d, but we expected %d", event.Kind, nostr.KindNostrConnect)
 	}
+
+	sessionLock := p.lockSession(event.PubKey)
+	sessionLock.Lock()
+	defer sessionLock.Unlock()
 
 	session, err := p.getOrCreateSession(event.PubKey)
 	if err != nil {

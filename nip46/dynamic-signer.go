@@ -14,6 +14,13 @@ import (
 
 var _ Signer = (*DynamicSigner)(nil)
 
+// sessionKey identifies a single NIP-46 conversation: a client talking to one
+// of our handler pubkeys.
+type sessionKey struct {
+	handler nostr.PubKey
+	client  nostr.PubKey
+}
+
 type DynamicSigner struct {
 	// { [handlePubkey]: {[clientKey]: Session} }
 	sessions map[nostr.PubKey]map[nostr.PubKey]*Session
@@ -21,7 +28,13 @@ type DynamicSigner struct {
 	// used for switch_relays call
 	DefaultRelays []string
 
-	sync.Mutex
+	// mu guards sessions and sessionLocks, nothing else. It is never held
+	// across a user callback or any cryptographic work, both of which can be
+	// arbitrarily slow.
+	mu sync.Mutex
+
+	// { {handler, client}: lock } -- one lock per session, see lockSession.
+	sessionLocks map[sessionKey]*sync.Mutex
 
 	// the handler is the keypair we use to communicate with the NIP-46 client, decrypt requests, encrypt responses etc
 	// the context can be returned as is, but it can also be returned with some values in it so they can be passed
@@ -49,7 +62,77 @@ type DynamicSigner struct {
 }
 
 func (p *DynamicSigner) Init() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.initLocked()
+}
+
+func (p *DynamicSigner) initLocked() {
 	p.sessions = make(map[nostr.PubKey]map[nostr.PubKey]*Session)
+	p.sessionLocks = make(map[sessionKey]*sync.Mutex)
+}
+
+// lockSession returns the lock that serializes requests for a single
+// (handler, client) pair.
+//
+// Sessions must not share a lock with each other. The callbacks below
+// (GetHandlerSecretKey, GetUserKeyer, AuthorizeSigning) and the signer they
+// wrap can take arbitrarily long -- a sign_event may mean a multi-round
+// threshold signing ceremony with remote signers -- so a single global lock
+// would let one slow session stall every other client on the server.
+//
+// The lock is still needed per session: Session keeps a replay window that
+// ParseRequest mutates, and requests for the same session must not overlap.
+func (p *DynamicSigner) lockSession(handlerPubkey, clientPubkey nostr.PubKey) *sync.Mutex {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.sessionLocks == nil {
+		p.initLocked()
+	}
+
+	key := sessionKey{handler: handlerPubkey, client: clientPubkey}
+	lock, exists := p.sessionLocks[key]
+	if !exists {
+		lock = new(sync.Mutex)
+		p.sessionLocks[key] = lock
+	}
+	return lock
+}
+
+// sessionFor returns the session for the given pair, creating it via create if
+// there isn't one yet. The caller must hold the lock from lockSession for that
+// same pair, so create runs at most once per pair.
+//
+// mu is not held while create runs, since creating a session involves deriving
+// a conversation key and calling back into the user-supplied GetUserKeyer.
+func (p *DynamicSigner) sessionFor(
+	handlerPubkey, clientPubkey nostr.PubKey,
+	create func() (*Session, error),
+) (*Session, error) {
+	p.mu.Lock()
+	if p.sessions == nil {
+		p.initLocked()
+	}
+	session, exists := p.sessions[handlerPubkey][clientPubkey]
+	p.mu.Unlock()
+
+	if exists {
+		return session, nil
+	}
+
+	session, err := create()
+	if err != nil {
+		return nil, err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[handlerPubkey] == nil {
+		p.sessions[handlerPubkey] = make(map[nostr.PubKey]*Session)
+	}
+	p.sessions[handlerPubkey][clientPubkey] = session
+	return session, nil
 }
 
 // HandleNostrConnectURI works like HandleRequest, but takes a nostrconnect:// URI as input, as scanned/pasted
@@ -108,7 +191,7 @@ func (p *DynamicSigner) HandleRequest(ctx context.Context, event nostr.Event) (
 	}
 
 	handler := event.Tags.Find("p")
-	if handler == nil || !nostr.IsValid32ByteHex(handler[1]) {
+	if handler == nil || len(handler) < 2 || !nostr.IsValid32ByteHex(handler[1]) {
 		return req, resp, eventResponse, fmt.Errorf("invalid \"p\" tag")
 	}
 
@@ -117,8 +200,12 @@ func (p *DynamicSigner) HandleRequest(ctx context.Context, event nostr.Event) (
 		return req, resp, eventResponse, fmt.Errorf("%x is invalid pubkey: %w", handler[1], err)
 	}
 
-	p.Lock()
-	defer p.Unlock()
+	// serialize only against other requests for this same session -- everything
+	// from here on is either a user callback or crypto work, and holding a
+	// server-wide lock across it would let one slow session stall every client
+	sessionLock := p.lockSession(handlerPubkey, event.PubKey)
+	sessionLock.Lock()
+	defer sessionLock.Unlock()
 
 	ctx, handlerSecret, err := p.GetHandlerSecretKey(ctx, handlerPubkey)
 	if err != nil {
@@ -129,30 +216,27 @@ func (p *DynamicSigner) HandleRequest(ctx context.Context, event nostr.Event) (
 		return req, resp, eventResponse, fmt.Errorf("failed to get user keyer for %s: %w", handlerPubkey, err)
 	}
 
-	handlerSessions, exists := p.sessions[handlerPubkey]
-	if !exists {
-		handlerSessions = make(map[nostr.PubKey]*Session)
-		p.sessions[handlerPubkey] = handlerSessions
-	}
-
-	session, exists := handlerSessions[event.PubKey]
-	if !exists {
+	session, err := p.sessionFor(handlerPubkey, event.PubKey, func() (*Session, error) {
 		// create session if it doesn't exist
-		session = &Session{}
+		session := &Session{}
 
-		session.ConversationKey, err = nip44.GenerateConversationKey(event.PubKey, handlerSecret)
+		conversationKey, err := nip44.GenerateConversationKey(event.PubKey, handlerSecret)
 		if err != nil {
-			return req, resp, eventResponse, fmt.Errorf("failed to compute shared secret: %w", err)
+			return nil, fmt.Errorf("failed to compute shared secret: %w", err)
 		}
+		session.ConversationKey = conversationKey
 
-		session.PublicKey, err = userKeyer.GetPublicKey(ctx)
+		publicKey, err := userKeyer.GetPublicKey(ctx)
 		if err != nil {
-			return req, resp, eventResponse, fmt.Errorf("failed to get public key: %w", err)
+			return nil, fmt.Errorf("failed to get public key: %w", err)
 		}
+		session.PublicKey = publicKey
+
+		return session, nil
+	})
+	if err != nil {
+		return req, resp, eventResponse, err
 	}
-
-	// save session
-	handlerSessions[event.PubKey] = session
 
 	// use this session to handle the request
 	req, err = session.ParseRequest(event)
