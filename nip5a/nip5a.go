@@ -29,7 +29,7 @@ func ParseSiteManifest(event *nostr.Event) (*SiteManifest, error) {
 	switch event.Kind {
 	case nostr.KindNsiteRoot:
 		sm.Root = true
-	case nostr.KindNsiteNamed:
+	case nostr.KindNsiteNamed, 35129, 35130:
 		sm.Root = false
 		for _, tag := range event.Tags {
 			if len(tag) >= 2 && tag[0] == "d" {
