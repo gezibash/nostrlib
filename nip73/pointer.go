@@ -14,9 +14,11 @@ func ExternalPointerFromTag(refTag nostr.Tag) (ExternalPointer, error) {
 	return ExternalPointer{refTag[1]}, nil
 }
 
-func (ep ExternalPointer) MatchesEvent(_ nostr.Event) bool { return false }
-func (ep ExternalPointer) AsTagReference() string          { return ep.Thing }
-func (ep ExternalPointer) AsFilter() nostr.Filter          { return nostr.Filter{} }
+func (ep ExternalPointer) MatchesEvent(_ nostr.Event) bool   { return false }
+func (ep ExternalPointer) AsTagReference() string            { return ep.Thing }
+func (ep ExternalPointer) AsFilter() nostr.Filter            { return nostr.Filter{} }
+func (ep ExternalPointer) RelayHints() []string              { return nil }
+func (ep ExternalPointer) AssociatedPublicKey() nostr.PubKey { return nostr.ZeroPK }
 
 func (ep ExternalPointer) AsTag() nostr.Tag {
 	return nostr.Tag{"i", ep.Thing}

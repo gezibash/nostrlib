@@ -19,6 +19,12 @@ type Pointer interface {
 
 	// AsFilter converts the pointer to a Filter that can be used to query for it on relays.
 	AsFilter() Filter
+
+	// RelayHints returns the relay hints available in the pointer, if any.
+	RelayHints() []string
+
+	// AssociatedPublicKey returns the pubkey of the profile that authored (or is the subject of) the pointer.
+	AssociatedPublicKey() PubKey
 	MatchesEvent(Event) bool
 }
 
@@ -53,9 +59,11 @@ func ProfilePointerFromTag(refTag Tag) (ProfilePointer, error) {
 }
 
 // MatchesEvent checks if the pointer matches an event.
-func (ep ProfilePointer) MatchesEvent(_ Event) bool { return false }
-func (ep ProfilePointer) AsFilter() Filter          { return Filter{Authors: []PubKey{ep.PublicKey}} }
-func (ep ProfilePointer) AsTagReference() string    { return HexEncodeToString(ep.PublicKey[:]) }
+func (ep ProfilePointer) MatchesEvent(_ Event) bool   { return false }
+func (ep ProfilePointer) AsFilter() Filter            { return Filter{Authors: []PubKey{ep.PublicKey}} }
+func (ep ProfilePointer) AsTagReference() string      { return HexEncodeToString(ep.PublicKey[:]) }
+func (ep ProfilePointer) RelayHints() []string        { return ep.Relays }
+func (ep ProfilePointer) AssociatedPublicKey() PubKey { return ep.PublicKey }
 
 func (ep ProfilePointer) AsTag() Tag {
 	if len(ep.Relays) > 0 {
@@ -98,6 +106,8 @@ func EventPointerFromTag(refTag Tag) (EventPointer, error) {
 func (ep EventPointer) MatchesEvent(evt Event) bool { return evt.ID == ep.ID }
 func (ep EventPointer) AsFilter() Filter            { return Filter{IDs: []ID{ep.ID}} }
 func (ep EventPointer) AsTagReference() string      { return HexEncodeToString(ep.ID[:]) }
+func (ep EventPointer) RelayHints() []string        { return ep.Relays }
+func (ep EventPointer) AssociatedPublicKey() PubKey { return ep.Author }
 
 // AsTag converts the pointer to a Tag.
 func (ep EventPointer) AsTag() Tag {
@@ -168,6 +178,9 @@ func (ep EntityPointer) MatchesEvent(evt Event) bool {
 func (ep EntityPointer) AsTagReference() string {
 	return fmt.Sprintf("%d:%s:%s", ep.Kind, ep.PublicKey.Hex(), ep.Identifier)
 }
+
+func (ep EntityPointer) RelayHints() []string        { return ep.Relays }
+func (ep EntityPointer) AssociatedPublicKey() PubKey { return ep.PublicKey }
 
 func (ep EntityPointer) AsFilter() Filter {
 	f := Filter{
