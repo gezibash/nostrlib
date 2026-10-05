@@ -146,3 +146,18 @@ func TestFailDecodeBadlyFormattedPubkey(t *testing.T) {
 	_, _, err := Decode("nevent1qqsgaj0la08u0vl2ecmlmrg4xl0vjcz647yx7jgvgzfr566ael4hmjgpp4mhxue69uhhjctzw5hx6egzgqurswpc8qurswpexq6rjvm9xp3nvcfkv56xzv35v9jnxve389snqephve3n2wf4vdsnxepcv56kxct9xyunjdf5v5cnzveexqcrsepnk6yu5r")
 	require.Error(t, err, "should fail to decode this because the author is hex as bytes garbage")
 }
+
+func TestEncodeNeventWithKind(t *testing.T) {
+	id := nostr.MustIDFromHex("ffcd7e1c4f1c1f13e06c8d7a4e0e2e1a3a1b3c3d4e5f60718293a4b5c6d7e8f9")
+	author := nostr.MustPubKeyFromHex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+	code := EncodeNeventWithKind(id, []string{"wss://relay.example.com"}, author, 30023)
+
+	prefix, value, err := Decode(code)
+	require.NoError(t, err)
+	require.Equal(t, "nevent", prefix)
+	ep := value.(nostr.EventPointer)
+	require.Equal(t, id, ep.ID)
+	require.Equal(t, author, ep.Author)
+	require.Equal(t, nostr.Kind(30023), ep.Kind)
+	require.Equal(t, []string{"wss://relay.example.com"}, ep.Relays)
+}

@@ -186,6 +186,27 @@ func EncodeNevent(id nostr.ID, relays []string, author nostr.PubKey) string {
 	return nevent
 }
 
+func EncodeNeventWithKind(id nostr.ID, relays []string, author nostr.PubKey, kind nostr.Kind) string {
+	buf := &bytes.Buffer{}
+	writeTLVEntry(buf, TLVDefault, id[:])
+
+	for _, url := range relays {
+		writeTLVEntry(buf, TLVRelay, []byte(url))
+	}
+
+	if author != nostr.ZeroPK {
+		writeTLVEntry(buf, TLVAuthor, author[:])
+	}
+
+	kindBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(kindBytes, uint32(kind))
+	writeTLVEntry(buf, TLVKind, kindBytes)
+
+	bits5, _ := bech32.ConvertBits(buf.Bytes(), 8, 5, true)
+	nevent, _ := bech32.Encode("nevent", bits5)
+	return nevent
+}
+
 func EncodeNaddr(pk nostr.PubKey, kind nostr.Kind, identifier string, relays []string) string {
 	buf := &bytes.Buffer{}
 
