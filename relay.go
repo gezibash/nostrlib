@@ -430,7 +430,16 @@ func (r *Relay) handleMessage(message string) {
 		}
 	case *CountEnvelope:
 		if subscription, ok := r.Subscriptions.Load(subIdToSerial(env.SubscriptionID)); ok && env.Count != nil && subscription.countResult != nil {
-			subscription.countResult <- *env
+			// countResult is closed under subscription.mu after the context ends (see PrepareSubscription).
+			// Check the context under the lock, and stop waiting when it ends, so we never send on a closed channel.
+			subscription.mu.Lock()
+			if subscription.Context.Err() == nil {
+				select {
+				case subscription.countResult <- *env:
+				case <-subscription.Context.Done():
+				}
+			}
+			subscription.mu.Unlock()
 		}
 	case *OKEnvelope:
 		r.okCallbacksMutex.Lock()
