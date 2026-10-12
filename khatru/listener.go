@@ -32,6 +32,10 @@ type subscription struct {
 }
 
 type dispatcher struct {
+	// mu guards the index sets, which change in place: addSubscription and
+	// removeSubscription hold it to write, candidates holds it to read.
+	mu sync.RWMutex
+
 	serial          int
 	subscriptions   *xsync.MapOf[int, subscription]
 	byAuthor        *xsync.MapOf[nostr.PubKey, set.Set[int]]
@@ -57,6 +61,9 @@ func newDispatcher() dispatcher {
 }
 
 func (d *dispatcher) addSubscription(sub subscription) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.serial++
 	ssid := d.serial
 
@@ -101,6 +108,9 @@ func (d *dispatcher) addSubscription(sub subscription) int {
 }
 
 func (d *dispatcher) removeSubscription(ssid int) nostr.Filter {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	var filter nostr.Filter
 
 	d.subscriptions.Compute(ssid, func(sub subscription, loaded bool) (subscription, bool) {
@@ -158,7 +168,26 @@ func (d *dispatcher) removeSubscription(ssid int) nostr.Filter {
 	return filter
 }
 
+// candidates collects the matching subscriptions under the read lock, and yields
+// them after it is released, so a slow consumer does not block subscriptions.
 func (d *dispatcher) candidates(event nostr.Event) iter.Seq[subscription] {
+	return func(yield func(subscription) bool) {
+		d.mu.RLock()
+		var subs []subscription
+		for sub := range d.indexedCandidates(event) {
+			subs = append(subs, sub)
+		}
+		d.mu.RUnlock()
+
+		for _, sub := range subs {
+			if !yield(sub) {
+				return
+			}
+		}
+	}
+}
+
+func (d *dispatcher) indexedCandidates(event nostr.Event) iter.Seq[subscription] {
 	return func(yield func(subscription) bool) {
 		authorSubs, hasAuthorSubs := d.byAuthor.Load(event.PubKey)
 		kindSubs, hasKindSubs := d.byKind.Load(event.Kind)
