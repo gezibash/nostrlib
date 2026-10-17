@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 	"unsafe"
@@ -35,6 +36,15 @@ type WebSocket struct {
 
 	// nip77
 	negentropySessions *xsync.MapOf[string, *NegentropySession]
+}
+
+// Authed returns a copy of the public keys that authenticated on this
+// connection. An AUTH changes AuthedPublicKeys under authLock, also in place,
+// so read the keys only through this method.
+func (ws *WebSocket) Authed() []nostr.PubKey {
+	ws.authLock.Lock()
+	defer ws.authLock.Unlock()
+	return slices.Clone(ws.AuthedPublicKeys)
 }
 
 func (ws *WebSocket) GetID() string {
