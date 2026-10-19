@@ -127,6 +127,7 @@ func TestCountEventsHLL(t *testing.T) {
 
 	t.Run("no kinds", func(t *testing.T) {
 		db := open(t, followA, followB, reactA, reactB, noteA)
+		db.EnableHLLCacheFor = noCache
 		check(t, db, nostr.Filter{Tags: nostr.TagMap{"p": {a}}}, followA, noteA)
 	})
 }
