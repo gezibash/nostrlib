@@ -105,3 +105,41 @@ func ids(events []nostr.Event) []nostr.ID {
 	}
 	return out
 }
+
+// A replaceable event replaces only an older event of its own author, also
+// when another author shares the first 8 bytes of its pubkey.
+func TestReplaceKeepsTheEventOfAnotherAuthor(t *testing.T) {
+	var pkA, pkB nostr.PubKey
+	_, err := hex.Decode(pkA[:], []byte("0123456789abcdef"+strings.Repeat("a", 48)))
+	require.NoError(t, err)
+	_, err = hex.Decode(pkB[:], []byte("0123456789abcdef"+strings.Repeat("b", 48)))
+	require.NoError(t, err)
+
+	newerA := nostr.Event{PubKey: pkA, Kind: 10002, CreatedAt: 2000, Content: "a"}
+	newerA.ID[16] = 1
+	olderB := nostr.Event{PubKey: pkB, Kind: 10002, CreatedAt: 1000, Content: "b"}
+	olderB.ID[16] = 2
+	newerB := nostr.Event{PubKey: pkB, Kind: 10002, CreatedAt: 3000, Content: "b2"}
+	newerB.ID[16] = 3
+
+	db := &BoltBackend{Path: filepath.Join(t.TempDir(), "bolt")}
+	require.NoError(t, db.Init())
+	defer db.Close()
+
+	deleted, err := db.ReplaceEvent(newerA)
+	require.NoError(t, err)
+	require.Empty(t, ids(deleted))
+
+	// a newer event of another author must not keep b's older one out
+	deleted, err = db.ReplaceEvent(olderB)
+	require.NoError(t, err)
+	require.Empty(t, ids(deleted))
+
+	// b's newer event replaces b's older one, and leaves a's alone
+	deleted, err = db.ReplaceEvent(newerB)
+	require.NoError(t, err)
+	require.Equal(t, ids([]nostr.Event{olderB}), ids(deleted))
+
+	got := slices.Collect(db.QueryEvents(nostr.Filter{Kinds: []nostr.Kind{10002}}, 500))
+	require.Equal(t, ids([]nostr.Event{newerB, newerA}), ids(got))
+}
