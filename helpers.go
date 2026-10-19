@@ -6,8 +6,8 @@ import (
 	"sync"
 	"unsafe"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/templexxx/xhex"
 	"golang.org/x/exp/constraints"
 )
 

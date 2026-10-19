@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
-	"github.com/templexxx/xhex"
 )
 
 var KeyOne = SecretKey{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}

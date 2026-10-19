@@ -4,8 +4,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/stretchr/testify/require"
-	"github.com/templexxx/xhex"
 )
 
 func TestParseMessageEnvelope(t *testing.T) {

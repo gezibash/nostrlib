@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/mailru/easyjson"
 	jwriter "github.com/mailru/easyjson/jwriter"
-	"github.com/templexxx/xhex"
 	"github.com/tidwall/gjson"
 )
 

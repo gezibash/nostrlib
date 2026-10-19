@@ -9,9 +9,9 @@ import (
 	"os"
 	"testing"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/templexxx/xhex"
 )
 
 func TestEventParsingAndVerifying(t *testing.T) {

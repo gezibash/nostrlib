@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"fiatjaf.com/nostr"
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/stretchr/testify/require"
-	"github.com/templexxx/xhex"
 )
 
 func assertCryptPriv(t *testing.T, skh1 string, skh2 string, conversationKey string, salt string, plaintext string, expected string) {
