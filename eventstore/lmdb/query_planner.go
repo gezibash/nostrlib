@@ -191,3 +191,16 @@ pubkeyMatching:
 	}
 	return queries, nil, nil, "", nil, since, nil
 }
+
+// fullCheck returns the filter that an event found through an index must match.
+// An empty list of authors or kinds selects no index in the planner, and so
+// matched any event before this check; the check keeps that.
+func fullCheck(filter nostr.Filter) nostr.Filter {
+	if len(filter.Authors) == 0 {
+		filter.Authors = nil
+	}
+	if len(filter.Kinds) == 0 {
+		filter.Kinds = nil
+	}
+	return filter
+}

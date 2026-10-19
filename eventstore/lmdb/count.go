@@ -98,17 +98,19 @@ func (b *LMDBBackend) CountEvents(filter nostr.Filter) (uint32, error) {
 // CountEventsHLL is like CountEvents, but it will build a hyperloglog value while iterating through results,
 // following NIP-45
 func (b *LMDBBackend) CountEventsHLL(filter nostr.Filter, offset int) (uint32, *hyperloglog.HyperLogLog, error) {
-	if useCache, _ := b.EnableHLLCacheFor(filter.Kinds[0]); useCache {
-		return b.countEventsHLLCached(filter)
+	if len(filter.Kinds) > 0 && b.EnableHLLCacheFor != nil {
+		if useCache, _ := b.EnableHLLCacheFor(filter.Kinds[0]); useCache {
+			return b.countEventsHLLCached(filter)
+		}
 	}
 
 	var count uint32 = 0
 
-	// this is different than CountEvents because some of these extra checks are not applicable in HLL-valid filters
-	queries, _, extraKinds, extraTagKey, extraTagValues, since, err := b.prepareQueries(filter)
+	queries, extraAuthors, extraKinds, _, _, since, err := b.prepareQueries(filter)
 	if err != nil {
 		return 0, nil, err
 	}
+	check := fullCheck(filter)
 
 	hll := hyperloglog.New(offset)
 
@@ -122,6 +124,11 @@ func (b *LMDBBackend) CountEventsHLL(filter nostr.Filter, offset int) (uint32, *
 
 			it := &iterator{cursor: cursor}
 			it.seek(q.startingPoint)
+
+			// an event found through an index that holds a prefix or a hash
+			// must be checked against the full filter
+			exact := (q.dbi == b.indexKind || q.dbi == b.indexCreatedAt) &&
+				check.IDs == nil && len(check.Tags) == 0
 
 			for {
 				// we already have a k and a v and an err from the cursor setup, so check and use these
@@ -143,25 +150,29 @@ func (b *LMDBBackend) CountEventsHLL(filter nostr.Filter, offset int) (uint32, *
 					panic(err)
 				}
 
-				if extraKinds == nil && extraTagValues == nil {
-					// nothing extra to check
+				if exact {
 					count++
 					hll.Add(betterbinary.GetPubKey(bin))
 				} else {
+					// check it against pubkeys without decoding the entire thing
+					if extraAuthors != nil && !slices.Contains(extraAuthors, betterbinary.GetPubKey(bin)) {
+						it.next()
+						continue
+					}
+
 					// check it against kinds without decoding the entire thing
-					if !slices.Contains(extraKinds, betterbinary.GetKind(bin)) {
+					if extraKinds != nil && !slices.Contains(extraKinds, betterbinary.GetKind(bin)) {
 						it.next()
 						continue
 					}
 
-					evt := &nostr.Event{}
-					if err := betterbinary.Unmarshal(bin, evt); err != nil {
+					evt := nostr.Event{}
+					if err := betterbinary.Unmarshal(bin, &evt); err != nil {
 						it.next()
 						continue
 					}
 
-					// if there is still a tag to be checked, do it now
-					if !evt.Tags.ContainsAny(extraTagKey, extraTagValues) {
+					if !check.MatchesIgnoringTimestampConstraints(evt) {
 						it.next()
 						continue
 					}
@@ -169,6 +180,8 @@ func (b *LMDBBackend) CountEventsHLL(filter nostr.Filter, offset int) (uint32, *
 					count++
 					hll.Add(evt.PubKey)
 				}
+
+				it.next()
 			}
 		}
 
