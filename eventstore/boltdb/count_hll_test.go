@@ -97,6 +97,8 @@ func TestCountEventsHLL(t *testing.T) {
 		{"other p tag and kind", nostr.Filter{Kinds: []nostr.Kind{3}, Tags: nostr.TagMap{"p": {b}}}, []nostr.Event{followB}},
 		{"e tag and kind", nostr.Filter{Kinds: []nostr.Kind{7}, Tags: nostr.TagMap{"e": {a}}}, []nostr.Event{reactA}},
 		{"other e tag and kind", nostr.Filter{Kinds: []nostr.Kind{7}, Tags: nostr.TagMap{"e": {b}}}, []nostr.Event{reactB}},
+		// the kind index, with nothing to check
+		{"kind only", nostr.Filter{Kinds: []nostr.Kind{3}}, []nostr.Event{followB, followA}},
 		// the pubkey-kind index, with no extra kinds or tags to check
 		{"author and kind", nostr.Filter{Kinds: []nostr.Kind{3}, Authors: []nostr.PubKey{pkB}}, []nostr.Event{followB}},
 	} {
@@ -117,8 +119,13 @@ func TestCountEventsHLL(t *testing.T) {
 		check(t, db, nostr.Filter{Kinds: []nostr.Kind{3}, Tags: nostr.TagMap{"p": {a}}}, followA)
 	})
 
-	// a store with no EnableHLLCacheFor, and a filter with no kinds
+	// a store with no EnableHLLCacheFor
 	t.Run("default store", func(t *testing.T) {
+		db := open(t, followA, followB, reactA, reactB, noteA)
+		check(t, db, nostr.Filter{Kinds: []nostr.Kind{3}, Tags: nostr.TagMap{"p": {a}}}, followA)
+	})
+
+	t.Run("no kinds", func(t *testing.T) {
 		db := open(t, followA, followB, reactA, reactB, noteA)
 		check(t, db, nostr.Filter{Tags: nostr.TagMap{"p": {a}}}, followA, noteA)
 	})
