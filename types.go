@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/templexxx/xhex"
+	"fiatjaf.com/nostr/internal/xhex"
 )
 
 // RelayEvent represents an event received from a specific relay.

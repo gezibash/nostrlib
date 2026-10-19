@@ -1,9 +1,9 @@
 package nostr
 
 import (
+	"fiatjaf.com/nostr/internal/xhex"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
-	"github.com/templexxx/xhex"
 )
 
 func easyjson33014d6eDecodeFiatjafComNostr(in *jlexer.Lexer, out *ProfilePointer) {

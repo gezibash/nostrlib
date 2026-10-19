@@ -7,9 +7,9 @@ import (
 
 	"fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/eventstore/codec/betterbinary"
+	"fiatjaf.com/nostr/internal/xhex"
 	"fiatjaf.com/nostr/nip45"
 	"fiatjaf.com/nostr/nip45/hyperloglog"
-	"github.com/templexxx/xhex"
 	"go.etcd.io/bbolt"
 )
 

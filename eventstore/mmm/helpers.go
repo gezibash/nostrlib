@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"fiatjaf.com/nostr"
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/PowerDNS/lmdb-go/lmdb"
-	"github.com/templexxx/xhex"
 )
 
 type iterator struct {

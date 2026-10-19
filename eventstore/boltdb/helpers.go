@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"fiatjaf.com/nostr"
-	"github.com/templexxx/xhex"
+	"fiatjaf.com/nostr/internal/xhex"
 	"go.etcd.io/bbolt"
 )
 

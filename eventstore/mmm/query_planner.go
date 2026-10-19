@@ -6,8 +6,8 @@ import (
 
 	"fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/eventstore/internal"
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/PowerDNS/lmdb-go/lmdb"
-	"github.com/templexxx/xhex"
 )
 
 type query struct {

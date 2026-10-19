@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 
 	"fiatjaf.com/nostr"
+	"fiatjaf.com/nostr/internal/xhex"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
-	"github.com/templexxx/xhex"
 )
 
 func easyjsonDecodeRelayInformationDocument(in *jlexer.Lexer, out *RelayInformationDocument) {

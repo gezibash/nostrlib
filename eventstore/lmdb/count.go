@@ -7,10 +7,10 @@ import (
 
 	"fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/eventstore/codec/betterbinary"
+	"fiatjaf.com/nostr/internal/xhex"
 	"fiatjaf.com/nostr/nip45"
 	"fiatjaf.com/nostr/nip45/hyperloglog"
 	"github.com/PowerDNS/lmdb-go/lmdb"
-	"github.com/templexxx/xhex"
 )
 
 func (b *LMDBBackend) CountEvents(filter nostr.Filter) (uint32, error) {

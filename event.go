@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"unsafe"
 
+	"fiatjaf.com/nostr/internal/xhex"
 	"github.com/mailru/easyjson"
-	"github.com/templexxx/xhex"
 )
 
 // Event represents a Nostr event.

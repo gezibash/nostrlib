@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"unsafe"
 
-	"github.com/templexxx/xhex"
+	"fiatjaf.com/nostr/internal/xhex"
 )
 
 // IsValidRelayURL checks if a URL is a valid relay URL (ws:// or wss://).
