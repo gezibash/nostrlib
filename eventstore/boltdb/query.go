@@ -59,6 +59,11 @@ func (b *BoltBackend) queryByIds(txn *bbolt.Tx, ids []nostr.ID, yield func(nostr
 			continue
 		}
 
+		// the raw store is keyed by 8 bytes of the id, so check the whole id
+		if event.ID != id {
+			continue
+		}
+
 		if !yield(event) {
 			return nil
 		}
@@ -68,10 +73,11 @@ func (b *BoltBackend) queryByIds(txn *bbolt.Tx, ids []nostr.ID, yield func(nostr
 }
 
 func (b *BoltBackend) query(txn *bbolt.Tx, filter nostr.Filter, limit int, yield func(nostr.Event) bool) error {
-	queries, extraAuthors, extraKinds, extraTagKey, extraTagValues, since, err := b.prepareQueries(filter)
+	queries, extraAuthors, extraKinds, _, _, since, err := b.prepareQueries(filter)
 	if err != nil {
 		return err
 	}
+	check := fullCheck(filter)
 
 	iterators := make(iterators, 0, len(queries))
 	for _, query := range queries {
@@ -147,8 +153,9 @@ func (b *BoltBackend) query(txn *bbolt.Tx, filter nostr.Filter, limit int, yield
 						continue
 					}
 
-					// if there is still a tag to be checked, do it now
-					if extraTagValues != nil && !event.Tags.ContainsAny(extraTagKey, extraTagValues) {
+					// indexes keep only a prefix or a hash of a pubkey or a tag value,
+					// so check the full filter against the full event
+					if !check.MatchesIgnoringTimestampConstraints(event) {
 						continue
 					}
 

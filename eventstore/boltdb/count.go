@@ -16,10 +16,11 @@ import (
 func (b *BoltBackend) CountEvents(filter nostr.Filter) (uint32, error) {
 	var count uint32 = 0
 
-	queries, extraAuthors, extraKinds, extraTagKey, extraTagValues, since, err := b.prepareQueries(filter)
+	queries, extraAuthors, extraKinds, _, _, since, err := b.prepareQueries(filter)
 	if err != nil {
 		return 0, err
 	}
+	check := fullCheck(filter)
 
 	err = b.DB.View(func(txn *bbolt.Tx) error {
 		rawBucket := txn.Bucket(rawEventStore)
@@ -30,6 +31,13 @@ func (b *BoltBackend) CountEvents(filter nostr.Filter) (uint32, error) {
 
 			it := newIterator(q, cursor)
 			it.seek(q.startingPoint)
+
+			// only the kind and created_at indexes hold full values, the others hold
+			// a prefix or a hash of a pubkey or a tag value, so an event they find
+			// must be checked against the full filter. The planner uses these two
+			// indexes only when the filter has no authors.
+			exact := (bytes.Equal(q.bucket, indexKind) || bytes.Equal(q.bucket, indexCreatedAt)) &&
+				check.IDs == nil && len(check.Tags) == 0
 
 			for {
 				// we already have a k and a v and an err from the cursor setup, so check and use these
@@ -43,7 +51,7 @@ func (b *BoltBackend) CountEvents(filter nostr.Filter) (uint32, error) {
 					break
 				}
 
-				if extraAuthors == nil && extraKinds == nil && extraTagValues == nil {
+				if exact {
 					count++
 				} else {
 					// fetch actual event
@@ -65,18 +73,15 @@ func (b *BoltBackend) CountEvents(filter nostr.Filter) (uint32, error) {
 						continue
 					}
 
-					if extraTagKey != "" {
-						evt := &nostr.Event{}
-						if err := betterbinary.Unmarshal(bin, evt); err != nil {
-							it.next()
-							continue
-						}
+					evt := nostr.Event{}
+					if err := betterbinary.Unmarshal(bin, &evt); err != nil {
+						it.next()
+						continue
+					}
 
-						// if there is still a tag to be checked, do it now
-						if !evt.Tags.ContainsAny(extraTagKey, extraTagValues) {
-							it.next()
-							continue
-						}
+					if !check.MatchesIgnoringTimestampConstraints(evt) {
+						it.next()
+						continue
 					}
 
 					count++
